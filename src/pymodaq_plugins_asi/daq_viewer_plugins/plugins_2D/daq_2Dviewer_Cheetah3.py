@@ -6,9 +6,9 @@ from pymodaq_gui.parameter import Parameter
 
 from pymodaq.control_modules.viewer_utility_classes import DAQ_Viewer_base, comon_parameters, main
 from pymodaq.utils.data import DataFromPlugins
-class PythonWrapperOfYourInstrument:
-    #  TODO Replace this fake class with the import of the real python wrapper of your instrument
-    pass
+# class PythonWrapperOfYourInstrument:
+#     #  TODO Replace this fake class with the import of the real python wrapper of your instrument
+#     pass
 
 # TODO:
 # (1) change the name of the following class to DAQ_2DViewer_TheNameOfYourChoice
@@ -16,7 +16,7 @@ class PythonWrapperOfYourInstrument:
 #     for the class name and the file name.)
 # (3) this file should then be put into the right folder, namely IN THE FOLDER OF THE PLUGIN YOU ARE DEVELOPING:
 #     pymodaq_plugins_my_plugin/daq_viewer_plugins/plugins_2D
-class DAQ_2DViewer_Template(DAQ_Viewer_base):
+class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
     """ Instrument plugin class for a 2D viewer.
     
     This object inherits all functionalities to communicate with PyMoDAQ’s DAQ_Viewer module through inheritance via

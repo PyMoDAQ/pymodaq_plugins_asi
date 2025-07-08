@@ -1,0 +1,13 @@
+title = 'this is the configuration file of the plugin XXX'
+
+[CHEETAH3]
+
+[CHEETAH3.connection]
+
+serverurl = 'http://localhost:8080'
+
+[CHEETAH3.folders]
+
+bpc = 'C:\\Users\\ASI'
+dacs = 'C:\\Users\\ASI'
+data = 'C:\\Users\\Data'
