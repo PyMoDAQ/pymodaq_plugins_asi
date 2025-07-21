@@ -8,6 +8,6 @@ serverurl = 'http://localhost:8080'
 
 [CHEETAH3.folders]
 
-bpc = 'C:\\Users\\ASI'
-dacs = 'C:\\Users\\ASI'
-data = 'C:\\Users\\Data'
+bpc = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
+dacs = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
+data = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
