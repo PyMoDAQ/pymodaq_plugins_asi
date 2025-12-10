@@ -1,13 +1,34 @@
-title = 'this is the configuration file of the plugin XXX'
+title = 'ASI Cheetah3 configuration file'
 
 [CHEETAH3]
 
-[CHEETAH3.connection]
+    [CHEETAH3.connection]
 
-serverurl = 'http://localhost:8080'
+        serverurl = 'http://localhost:8080'
 
-[CHEETAH3.folders]
+    [CHEETAH3.file_paths]
 
-bpc = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
-dacs = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
-data = '/home/adteurtrie/timepix/20231120 ASI Server 3.3.0 (TPX3)/examples/tpx3'
+        bpc = ['/home/asi/bpc_00.bpc']
+        dacs = ['/home/asi/dacs_00.dacs']
+        data = ['/home/asi/']
+
+    [CHEETAH3.destinations]
+
+        [CHEETAH3.destinations.live_preview]
+
+            [CHEETAH3.destinations.live_preview.Preview]
+
+                SamplingMode = 'skipOnFrame'
+                Period = 0.1
+                ImageChannels = [
+                    { Base = 'http://localhost:8082', Mode = 'count', Format = 'tiff'}
+                ]
+
+        [CHEETAH3.destinations.save_locally]
+
+            Raw = [
+                {Base = "file:/data/raw", FilePattern = "f%Hms_", SplitStrategy = "FRAME", QueueSize = 16384}
+            ]
+
+
+
