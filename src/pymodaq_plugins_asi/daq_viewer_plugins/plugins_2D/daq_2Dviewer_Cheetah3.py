@@ -59,7 +59,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         The callback object for asynchronous acquistion
     callback_thread : QThread
         The callback lives on a different thread.
-    callback_signal
+    startup_callback_signal
         The callback emits a signal when data are ready.
 
     Comments were made on how it works and can be found by search CT{0-99}.
@@ -100,7 +100,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         elif param.name() == 'save_folder_path' : 
             self.controller.config.add_save_folder(param.value())
         elif param.name() == 'destination' : 
-            self.controller.config.build_destination(param.value())
+            self.controller.config.build_destination(param.value()["selected"])
 
     ########################
     # I. 1. Initialisation #
@@ -108,7 +108,9 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
     live_mode_available = True
     # CT01. We create a signal object to start the execution of the callback thread.
+    startup_callback_signal = QtCore.Signal()
     callback_signal = QtCore.Signal()
+
     
     def ini_attributes(self):
         self.controller: Cheetah3 = None
@@ -132,7 +134,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         initialized: bool
             False if initialization failed otherwise True
         """
-        self.controller = self.ini_controller_init(slave_controller = controller, new_controller = Cheetah3() ) 
+        self.controller = self.ini_detector_init(slave_controller = controller, new_controller = Cheetah3() ) 
         if self.is_master:
             initialized = self.controller.check_connection()
             info = "The DAQ_viewer Cheetah3 has successfully started"
@@ -150,16 +152,18 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             # CT06. We make the thread ready to execute
             self.callback_thread.start()
             # CT07. We connect the signal to the execution of data read-out from the detector
-            self.callback_signal.connect(self.callback.read_data)
+            self.startup_callback_signal.connect(self.callback.start_readout)
+            self.callback_signal.connect(self.callback.readout)
             # CT08. We connect the signal of the callback to the execution of PyMoDAQ GUI to display data.
             self.callback.data_sig.connect(self.emit_data)
+            self.callback.data_sig_startup.connect(self.emit_data)
         else:
             self.controller = controller
             initialized = True
 
         profile_names = self.controller.config.destination_names_list()
         self.settings.addChild({'title' : 'Data destination', 'name' : 'destination', 'type' : 'itemselect', 'value' : dict(
-            all_items = profile_names, selected = profile_names[0]
+            all_items = profile_names, selected =['live_preview']
         ), 'checkbox' : True})
 
         return info, initialized
@@ -234,13 +238,13 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             if kwargs.get('live',False) == True :
                 self.controller.ntriggers = int(2e9)
                 self.controller.start()
-                # CT9. We trigger the execution of the callback thread read_data function. 
-                self.callback_signal.emit()
+                # CT9. We trigger the execution of the callback thread start_readout function. 
+                self.startup_callback_signal.emit()
 
             else:
                 self.controller.ntriggers = 1
                 self.controller.start()
-                self.callback_signal.emit()
+                self.startup_callback_signal.emit()
 
 
         except Exception as e:
@@ -260,33 +264,37 @@ class Cheetah3Callback(QtCore.QObject):
     """
 
     """
+    data_sig_startup = QtCore.Signal(np.ndarray)
     data_sig = QtCore.Signal(np.ndarray)
 
     def __init__(self, controller):
         super(Cheetah3Callback, self).__init__()
         self.buffer = collections.deque(maxlen=100)
         self.controller = controller
-        self.not_running = True
-    
+ 
+    def start_readout(self):
+        while True :
+            # CT10. We start a blocking function. It waits until data are avaible.
+            current_image = self.controller.preview() 
+            self.buffer.append(current_image)
+            if len(self.buffer) > 0 :
+                # CT11. One data are ready we want them displayed, so we signal the main thread
+                self.data_sig_startup.emit(self.buffer.pop())
+            if self.controller.get_status() == "DA_STOPPING" or self.controller.get_status() == "DA_IDLE" : 
+                logger.info("Acquisition finished")
+                break
 
-    def read_data(self):
-        if self.not_running :
-            while True :
-                # CT10. We start a blocking function. It waits until data are avaible.
-                current_image = self.controller.preview() 
-                self.buffer.append(current_image)
-                if len(self.buffer) > 0 :
-                    # CT11. One data are ready we want them displayed, so we signal the main thread
-                    self.data_sig.emit(self.buffer.pop())
-                    self.not_running = False
-                if self.controller.get_status() == "DA_STOPPING" or self.controller.get_status() == "DA_IDLE" : 
-                    logger.info("Acquisition finished")
-                    break
-                # CT12. The side thread continues to pile up data in the rolling buffer
-        else : 
+            # CT12. The side thread continues to pile up data in the rolling buffer
+    
+    def readout(self) :
             # CT15. Since the loop is still running 
+        while True :
             if len(self.buffer) > 0 : 
-                self.data_sig.emit(self.buffer.pop())
+                break
+            else :
+                if self.controller.get_status() == "DA_STOPPING" or self.controller.get_status() == "DA_IDLE" :
+                    return
+        self.data_sig.emit(self.buffer.pop())
 
 ###########################            
 # III. Local testing code #

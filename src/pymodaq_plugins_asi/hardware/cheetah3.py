@@ -341,7 +341,7 @@ class Cheetah3() :
         self.put_request(url=self.serverurl +'/detector/config', data = json.dumps(self.detector_config))
 
 
-        logger.debug(f'Loaded config :\nTriggerMode : {self.detector_config['TriggerMode']}\nExposureTime : {self.detector_config['ExposureTime']}\nTriggerPeriod : {self.detector_config['TriggerPeriod']}\nnTriggers : {self.detector_config['nTriggers']}')
+        # logger.debug(f'Loaded config :\nTriggerMode : {self.detector_config['TriggerMode']}\nExposureTime : {self.detector_config['ExposureTime']}\nTriggerPeriod : {self.detector_config['TriggerPeriod']}\nnTriggers : {self.detector_config['nTriggers']}')
 
     def set_continuous_mode(self, **kwargs) -> None :
         """
