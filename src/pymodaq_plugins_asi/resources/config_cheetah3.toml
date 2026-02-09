@@ -30,5 +30,14 @@ title = 'ASI Cheetah3 configuration file'
                 {Base = "file:/data/raw", FilePattern = "f%Hms_", SplitStrategy = "FRAME", QueueSize = 16384}
             ]
 
+        [CHEETAH3.destinations.tp3_tools]
+
+            Raw = [
+                {Base = "tcp://connect@127.0.0.1:8098"}
+            ]
+
+
+        
+
 
 

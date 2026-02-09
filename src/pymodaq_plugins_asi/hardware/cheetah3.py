@@ -203,6 +203,8 @@ class Cheetah3() :
         self._readout_time = Quantity('10ms')
         self._ntriggers = 1
         self._destination_profiles = ['live_preview']
+        self._x_size = None
+        self._y_size = None
 
 
     #######################################
@@ -453,6 +455,18 @@ class Cheetah3() :
     @destination_profiles.setter
     def destination_profiles(self,value : list[str]) -> None :
         self._destination_profiles = value
+        
+    @property
+    def x_size(self) -> int : 
+        if self._x_size is None : 
+            self._x_size = self.detector_config["Original"]["Width"]
+        return self._x_size
+    
+    @property
+    def y_size(self) -> int : 
+        if self._y_size is None : 
+            self._y_size = self.detector_config["Original"]["Height"]
+        return self._y_size
 
     ########################################
     # II. 4. Cheetah3 start/stop functions #

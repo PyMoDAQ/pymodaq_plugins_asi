@@ -11,6 +11,7 @@ from pymodaq_utils.logger import set_logger, get_module_name
 import collections
 
 from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3
+from pymodaq_plugins_asi.hardware.camera_utils import bin2d, get_bin_list
 
 logger = set_logger(get_module_name(__file__))
 
@@ -22,6 +23,7 @@ logger = set_logger(get_module_name(__file__))
 # I. 1. Parameters
 # I. 2. Initialisation
 # I. 3. Data acquisition
+# I. 4. Properties
 # II. Callback class
 # III. Local testing code
 
@@ -72,7 +74,8 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
     params = comon_parameters + [
         {'title' : "Frame-based camera settings", 'name' : 'camera_settings', 'type' : 'group', 'expanded' : True, 'children' : [
             {'title' : 'Exposure time', 'name' : 'exposure_time', 'type' : 'float', 'value' : 0.5},
-            {'title' : 'Full binning', 'name' : 'binning', 'type' : 'itemselect', 'value' : dict(all_items = ['None','Vertical', 'Horizontal' ], selected = ['None']) }
+            {'title' : 'x binning', 'name' : 'x_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
+            {'title' : 'y binning', 'name' : 'y_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
         ]},
         {'title' : 'File paths', 'name' : 'file_paths', 'type' : 'group', 'expanded' : False, 'children' : [
             {'title' : 'bpc file path', 'name' : 'bpc_file_path', 'type' : 'str', 'value' : '/home/asi/bpc/'},
@@ -117,7 +120,10 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
         self.x_axis = None
         self.y_axis = None
-        self.binning = 'None'
+        self.x_binning = 1
+        self.y_binning = 1
+        self._x_size = 1
+        self._y_size = 1
 
     def ini_detector(self, controller=None):
         """Detector communication initialization
@@ -134,7 +140,7 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         initialized: bool
             False if initialization failed otherwise True
         """
-        self.controller = self.ini_detector_init(slave_controller = controller, new_controller = Cheetah3() ) 
+        self.controller = self.ini_detector_init(slave_controller = controller, new_controller = Cheetah3()) 
         if self.is_master:
             initialized = self.controller.check_connection()
             info = "The DAQ_viewer Cheetah3 has successfully started"
@@ -165,6 +171,10 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         self.settings.addChild({'title' : 'Data destination', 'name' : 'destination', 'type' : 'itemselect', 'value' : dict(
             all_items = profile_names, selected =['live_preview']
         ), 'checkbox' : True})
+        self._x_size = self.controller.x_size
+        self._y_size = self.controller.y_size
+        self.settings.child('camera_settings','x_binning').setLimits(get_bin_list(self.x_size))
+        self.settings.child('camera_settings','y_binning').setLimits(get_bin_list(self.y_size))
 
         return info, initialized
 
@@ -180,6 +190,61 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
     ##########################
     # I. 3. Data acquisition #
     ##########################
+    
+    def set_axes(self) :
+        """
+        Set the axes for display depending on binning values. Can change the representation from 2D to 1D or 0D.
+        """
+        data_x_axis = np.linspace(start= 0, stop = self.x_size//self.x_binning, num = self.x_size//self.x_binning)
+        data_y_axis = np.linspace(start= 0, stop = self.y_size//self.y_binning, num = self.y_size//self.y_binning)
+        # Case 1 : full binning both directions -> 0D data
+        if self.x_binning == self.x_size and self.y_binning == self.y_size :
+            dummy_data = np.array([0.0])
+        # Case 2 : full binning in the x direction -> 1D data
+        elif self.x_binning == self.x_size and self.y_binning != self.y_size : 
+            dummy_data = np.zeros((self.y_size//self.y_binning,))
+            self.y_axis = Axis(data=data_y_axis, label='', units='', index=0)
+        # Case 3 : full binning in the y direction -> 1D data
+        elif self.y_binning == self.y_size and self.x_binning != self.x_size :
+            dummy_data = np.zeros((self.x_size//self.x_binning,))
+            self.x_axis = Axis(data=data_x_axis, label='Energy loss', units='eV', index=0)
+        # Case 4 : No full binning -> 2D data
+        else :
+            dummy_data = np.zeros((self.y_size//self.y_binning,self.x_size//self.x_binning))
+            self.y_axis = Axis(data=data_y_axis, label='', units='', index=0)
+            self.x_axis = Axis(data=data_x_axis, label='Energy loss', units='eV', index=1)
+
+        dfp = self.prepare_dfp(dummy_data)
+        # Prepares the viewer
+        self.dte_signal_temp.emit(DataToExport('Cheetah3',
+                                               data=dfp))
+        
+    def prepare_dfp (self, data : np.ndarray) -> DataFromPlugins :
+        """
+        Prepares DataFromPlugins for display. Chooses the right axes and data size based on the data shape.
+        
+        Parameters
+        ----------
+        data : np.ndarray
+            input data. It can be any shape up to 2D.
+        """ 
+        if self.x_binning == self.x_size and self.y_binning == self.y_size :
+            dfp = [DataFromPlugins(name = 'Picam',
+                                data = data,
+                                dim = 'Data0D')] 
+        elif self.x_binning == self.x_size and self.y_binning != self.y_size : 
+            dfp = [DataFromPlugins(name = 'Picam',
+                                data = [np.atleast_1d(data)],
+                                dim = 'Data1D',axes=[self.y_axis])] 
+        elif self.y_binning == self.y_size and self.x_binning != self.x_size : 
+            dfp = [DataFromPlugins(name = 'Picam',
+                                data = [np.atleast_1d(data)],
+                                dim = 'Data1D',axes=[self.x_axis])]
+        else :
+            dfp = [DataFromPlugins(name = 'Picam',
+                                data = [np.atleast_1d(data)],
+                                dim = 'Data2D',axes=[self.x_axis, self.y_axis])]
+        return dfp
 
     def emit_data(self,data : np.ndarray):
         # Add a bool as arg so that I can pick finishing acquisition or current
@@ -255,6 +320,18 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         """Stop the current grab hardware wise if necessary"""
         ## TODO for your custom plugin
         self.controller.stop()
+        
+    ####################
+    # I. 4. Properties #
+    ####################
+    
+    @property
+    def x_size(self) : 
+        return self._x_size
+    
+    @property
+    def y_size(self) : 
+        return self._y_size
 
 ######################
 # II. Callback class #
