@@ -1,11 +1,15 @@
-import requests
+from io import BytesIO
 import json
-from pymodaq_plugins_asi.utils import Config
+import time
+import threading
+
+import requests
 from pymodaq_utils.logger import set_logger, get_module_name
 from pint import Quantity
 from PIL import Image
-from io import BytesIO
 import numpy as np
+
+from pymodaq_plugins_asi.utils import Config
 
 logger = set_logger(get_module_name(__file__))
 
@@ -156,7 +160,7 @@ class Cheetah3Config :
         """ 
         save_folders = self.config["CHEETAH3"]["file_paths"]['data']
         save_folders.append(folder_path)
-        self.config["CHEETAH3"]["file_paths"]['dacs'] = save_folders
+        self.config["CHEETAH3"]["file_paths"]['data'] = save_folders
         self.config.save()
 
 #################################
@@ -196,6 +200,7 @@ class Cheetah3() :
         self.serverurl = self.config.config['CHEETAH3']['connection']['serverurl']
         self.dashboard = self.get_dashboard()
         self.detector_config = self.get_detector_config()
+        self.detector_info = self.get_detector_info()
         self._bpc_file = None
         self._dacs_file = None
         self._save_folder = None
@@ -205,7 +210,7 @@ class Cheetah3() :
         self._destination_profiles = ['live_preview']
         self._x_size = None
         self._y_size = None
-
+        self._start_time = 0.0
 
     #######################################
     # II. 1. `requests` generic functions #
@@ -227,9 +232,9 @@ class Cheetah3() :
         :Response: Response object from the server
 
         """
-        response = requests.get(url=url)
+        response = requests.get(url=url, timeout=10.0)
         if response.status_code != expected_status:
-            raise Exception("Failed GET request: {}, response: {} {}".format(url, response.status_code, response.text))
+            raise BrokenPipeError("Failed GET request: %s, response: %s %s",url, response.status_code, response.text)
 
         return response
 
@@ -251,9 +256,9 @@ class Cheetah3() :
         :Response: Response object from the server
 
         """
-        response = requests.put(url=url, data=data)
+        response = requests.put(url=url, data=data, timeout=10.0)
         if response.status_code != expected_status:
-            raise Exception("Failed PUT request: {}, response: {} {}".format(url, response.status_code, response.text))
+            raise BrokenPipeError("Failed PUT request: %s, response: %s %s",url, response.status_code, response.text)
 
         return response
     
@@ -301,6 +306,19 @@ class Cheetah3() :
         response = self.get_request(url=self.serverurl + '/detector/config')
         detector_config = json.loads(response.text)
         return detector_config
+    
+    def get_detector_info(self) -> dict :
+        """
+        Gets the Cheetah3 detector info.
+        
+        Results
+        -------
+
+        :detector_config: Dictionnary of the current configuration of the detector.
+        """  
+        response = self.get_request(url=self.serverurl + '/detector/info')
+        detector_config = json.loads(response.text)
+        return detector_config
 
     def load_pixel_config(self) -> None:
         """
@@ -312,11 +330,11 @@ class Cheetah3() :
         """
         # load a binary pixel configuration exported by SoPhy, the file should exist on the server
         response = self.get_request(url=self.serverurl + '/config/load?format=pixelconfig&file=' + self.bpc_file)
-        logger.debug(f'Response of loading binary pixel configuration file:{response.text}' )
+        logger.debug('Response of loading binary pixel configuration file: %s',response.text )
 
         #  .... and the corresponding DACs file
         response = self.get_request(url=self.serverurl + '/config/load?format=dacs&file=' + self.dacs_file)
-        logger.debug(f'Response of loading DACs file: {response.text}')
+        logger.debug('Response of loading DACs file: %s',response.text)
 
     def set_detector_config(self,trigger_mode = 'continuous',ntriggers=1,trigger_period=0.5) -> None : 
         """
@@ -385,7 +403,9 @@ class Cheetah3() :
         """
         for profile in profile_list : 
             assert profile in self.config.destination_names_list(), f"You have to first add this profile : {profile} to the available list of profiles : {self.config.destination_names_list()}"
-        self.config.build_destination(profile_list) 
+        self.config.build_destination(profile_list)
+        if 'Preview' in self.config.destination.keys() : 
+            self.config.destination['Preview']['Period'] = max(self.exposure_time.magnitude,0.05)
         self.put_request(url = self.serverurl + '/server/destination', data = json.dumps(self.config.destination))  
 
     ##############################
@@ -403,7 +423,7 @@ class Cheetah3() :
         if filename in self.config.config['CHEETAH3']['file_paths']['bpc'] :
             self._bpc_file = filename
         else :
-            logger.info(f'the bpc file : {filename} is not part of the available files.')  
+            logger.info('the bpc file : %s is not part of the available files.',filename)  
 
     @property
     def dacs_file(self) -> str : 
@@ -416,7 +436,7 @@ class Cheetah3() :
         if filename in self.config.config['CHEETAH3']['file_paths']['dacs'] :
             self._dacs_file = filename
         else :
-            logger.info(f'the dacs file : {filename} is not part of the available files.') 
+            logger.info('the dacs file : %s is not part of the available files.', filename) 
 
     @property
     def save_folder(self) -> str : 
@@ -429,16 +449,19 @@ class Cheetah3() :
         if folder_name in self.config.config['CHEETAH3']['file_paths']['data'] :
             self._save_folder = folder_name
         else :
-            logger.info(f'the dacs file : {folder_name} is not part of the available files.') 
+            logger.info('the dacs file : %s is not part of the available files.', folder_name) 
 
     @property
-    def exposure_time (self) -> float : 
+    def exposure_time (self) -> Quantity : 
         return self._exposure_time.to('s')
     
     @exposure_time.setter
-    def exposure_time(self,value : float) -> None : 
-        q = Quantity(value,'s')
-        self._exposure_time = q.to('s') 
+    def exposure_time(self,value) -> None : 
+        if isinstance(value,str) : 
+            q = Quantity(value)
+        else : 
+            q = Quantity(value,'s')
+        self._exposure_time = q
 
     @property
     def ntriggers(self) -> int : 
@@ -459,29 +482,51 @@ class Cheetah3() :
     @property
     def x_size(self) -> int : 
         if self._x_size is None : 
-            self._x_size = self.detector_config["Original"]["Width"]
+            self._x_size = self.detector_info["PixCount"]//self.detector_info["NumberOfRows"]
         return self._x_size
     
     @property
     def y_size(self) -> int : 
         if self._y_size is None : 
-            self._y_size = self.detector_config["Original"]["Height"]
+            self._y_size = self.detector_info["NumberOfRows"]
         return self._y_size
 
     ########################################
     # II. 4. Cheetah3 start/stop functions #
     ########################################
+    
+    def count_time(self,timeout : float) :
+        while True :  
+            current_time = time.time()
+            if (current_time - self._start_time) > timeout : 
+                self.stop()
+                break
 
-    def start(self):
+    def start(self,timeout : float = 0.0):
         """Perform acquisition
 
         Keyword arguments:
         serverurl -- the URL of the running SERVAL (string)
+        
+        Parameters
+        ----------
+        timeout : float
+            time until camera stop is automatically called
         """
-        self.set_detector_config(ntriggers=self.ntriggers, trigger_mode='automatic')
-        self.set_destination(profile_list=self.destination_profiles)
-        response = self.get_request(url=self.serverurl + '/measurement/start')
-        logger.info('Response of acquisition start: ' + response.text)
+        if self.get_status() == "DA_RECORDING" : 
+            self._start_time = time.time()
+        else : 
+            self.set_detector_config(ntriggers=self.ntriggers, trigger_mode='automatic')
+            self.set_destination(profile_list=self.destination_profiles)
+            response = self.get_request(url=self.serverurl + '/measurement/start')
+            logger.info('Response of acquisition start: %s', response.text)
+            if timeout > 0.0 : 
+                self._start_time = time.time()
+                timer = threading.Thread(target=self.count_time, args=(timeout,))
+                timer.start()
+        # The snap mode of the grab_data method of the DAQ viewer would technically call many times start and stop 
+        # Since the camera takes some time to start and stop, it is better to stop only after a timeout.
+        # In case of a DAQ scan, the snap is called repeatdly which can cause some issue if the camera is started/stopped too fast.
 
     def preview(self):
         """Preview of collected data
@@ -504,32 +549,33 @@ class Cheetah3() :
         else : 
             return self.get_dashboard()["Measurement"]["Status"]
 
-    def wait_for_acq(self) : 
-        while True : 
-            status = self.get_status() 
-            if status == "DA_RECORDING" : 
-                return 1
-            elif status == "DA_IDLE" : 
-                pass
-            elif status == "DA_PREPARING" :
-                pass
-            elif status == "DA_STOPPING" : 
-                return 0 
-
     def stop(self) : 
         response = self.get_request(url=self.serverurl + '/measurement/stop')
         data = response.text
-        logger.info('Response of acquisition stop : ' + data)
+        logger.info('Response of acquisition stop : %s',data)
             
 ###########################            
 # III. Local testing code #
 ###########################
 
 if __name__ == '__main__' : 
-    cc = Cheetah3Config()
-    cc.config
-    # cam = Cheetah3()
-    # cam.check_connection()
+    # cc = Cheetah3Config()
+    # cc.config
+    cam = Cheetah3()
+    cam.check_connection()
+    cam.ntriggers = 300
+    cam.exposure_time = 2
+    cam.start()
+    # print('started')
+    while True :
+        try :  
+            cam.preview()
+            print(cam.get_status())
+        except KeyboardInterrupt : 
+            cam.stop()
+            print('stop')
+            break
+    
     # # cam.start_listening()
     # # print(cam.get_dashboard())
     # # print(cam.bpc_file)

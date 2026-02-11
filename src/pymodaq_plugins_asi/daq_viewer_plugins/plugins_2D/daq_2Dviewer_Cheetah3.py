@@ -22,7 +22,7 @@ logger = set_logger(get_module_name(__file__))
 # I. DAQ_2DViewer_Cheetah3
 # I. 1. Parameters
 # I. 2. Initialisation
-# I. 3. Data acquisition
+# I. 3. Data acquisition and axes
 # I. 4. Properties
 # II. Callback class
 # III. Local testing code
@@ -77,11 +77,16 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             {'title' : 'x binning', 'name' : 'x_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
             {'title' : 'y binning', 'name' : 'y_binning', 'type' : 'list', 'value' : 1, 'limits' : [1]},
         ]},
-        {'title' : 'File paths', 'name' : 'file_paths', 'type' : 'group', 'expanded' : False, 'children' : [
-            {'title' : 'bpc file path', 'name' : 'bpc_file_path', 'type' : 'str', 'value' : '/home/asi/bpc/'},
-            {'title' : 'dacs file path', 'name' : 'dacs_file_path', 'type' : 'str', 'value' : '/home/asi/dacs/'},
-            {'title' : 'save folder path', 'name' : 'save_folder_path', 'type' : 'str', 'value' : '/home/asi/data/'},
-        ]}           
+        {'title' : 'File paths input', 'name' : 'file_paths', 'type' : 'group', 'expanded' : False, 'children' : [
+            {'title' : 'Add bpc file path', 'name' : 'bpc_file_path', 'type' : 'str', 'value' : '/home/asi/'},
+            {'title' : 'Add dacs file path', 'name' : 'dacs_file_path', 'type' : 'str', 'value' : '/home/asi/'},
+            {'title' : 'Add save folder path', 'name' : 'save_folder_path', 'type' : 'str', 'value' : '/home/asi/'},
+        ]},
+        {'title' : 'Current file paths', 'name' : 'file_paths_lists', 'type' : 'group', 'expanded' : True, 'children' : [
+            {'title' : 'bpc file paths', 'name' : 'bpc_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
+            {'title' : 'dacs file paths', 'name' : 'dacs_file_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
+            {'title' : 'save folder paths', 'name' : 'save_folder_paths_list', 'type' : 'list', 'value' : '', 'limits' : ['']},
+        ]}            
     ]
 
     def commit_settings(self, param: Parameter):
@@ -92,18 +97,32 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         param: Parameter
             A given parameter (within detector_settings) whose value has been changed by the user
         """
+        # There is probably a better way to select params, e.g. based on groups. But the current version is simpler even though quite verbose.
         if param.name() == "exposure_time":
             self.controller.exposure_time = param.value()
-        elif param.name() == 'binning' :
-            self.binning = param.value()['selected']
-        elif param.name() == 'bpc_file_path' : 
+        elif param.name() == 'x_binning' :
+            self.x_binning = param.value()
+            self.set_axes()
+        elif param.name() == 'y_binning' :
+            self.y_binning = param.value()
+            self.set_axes()
+        elif param.name() == 'bpc_file_path' :
             self.controller.config.add_bpc_file(param.value())
-        elif param.name() == 'dacs_file_path' : 
+            # self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
+        elif param.name() == 'dacs_file_path' :
             self.controller.config.add_dacs_file(param.value())
-        elif param.name() == 'save_folder_path' : 
+            # self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
+        elif param.name() == 'save_folder_path' :
             self.controller.config.add_save_folder(param.value())
-        elif param.name() == 'destination' : 
+            # self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
+        elif param.name() == 'destination' :
             self.controller.config.build_destination(param.value()["selected"])
+        elif param.name() == 'bpc_file_paths_list' :
+            self.controller.bpc_file = param.value()
+        elif param.name() == 'dacs_file_paths_list' :
+            self.controller.dacs_file = param.value()
+        elif param.name() == 'save_folder_paths_list' :
+            self.controller.save_folder = param.value()
 
     ########################
     # I. 1. Initialisation #
@@ -111,10 +130,8 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
     live_mode_available = True
     # CT01. We create a signal object to start the execution of the callback thread.
-    startup_callback_signal = QtCore.Signal()
-    callback_signal = QtCore.Signal()
+    callback_signal = QtCore.Signal(int)
 
-    
     def ini_attributes(self):
         self.controller: Cheetah3 = None
 
@@ -144,9 +161,6 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         if self.is_master:
             initialized = self.controller.check_connection()
             info = "The DAQ_viewer Cheetah3 has successfully started"
-            self.x_axis = Axis(data=np.linspace(0,  512 - 1, 512, dtype=int), label='Pixels', index=1)
-            self.y_axis = Axis(data=np.linspace(0, 512 - 1, 512, dtype=int), label='Pixels', index=1)
-
             # CT02. An object (called callback), is instanciated.
             self.callback = Cheetah3Callback(self.controller)
             # CT03. A thread object is created (callback_thread)
@@ -158,11 +172,9 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             # CT06. We make the thread ready to execute
             self.callback_thread.start()
             # CT07. We connect the signal to the execution of data read-out from the detector
-            self.startup_callback_signal.connect(self.callback.start_readout)
             self.callback_signal.connect(self.callback.readout)
             # CT08. We connect the signal of the callback to the execution of PyMoDAQ GUI to display data.
             self.callback.data_sig.connect(self.emit_data)
-            self.callback.data_sig_startup.connect(self.emit_data)
         else:
             self.controller = controller
             initialized = True
@@ -175,21 +187,19 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         self._y_size = self.controller.y_size
         self.settings.child('camera_settings','x_binning').setLimits(get_bin_list(self.x_size))
         self.settings.child('camera_settings','y_binning').setLimits(get_bin_list(self.y_size))
+        self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
+        self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
+        self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
 
         return info, initialized
 
     def close(self):
         """Terminate the communication protocol"""
-        ## TODO for your custom plugin
-        pass
-        # raise NotImplementedError  # when writing your own plugin remove this line
-        # if self.is_master:
-        #     #  self.controller.your_method_to_terminate_the_communication()  # when writing your own plugin replace this line
-        #     ...
+        self.controller.stop()
 
-    ##########################
-    # I. 3. Data acquisition #
-    ##########################
+    ###################################
+    # I. 3. Data acquisition and axes #
+    ###################################
     
     def set_axes(self) :
         """
@@ -207,12 +217,12 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         # Case 3 : full binning in the y direction -> 1D data
         elif self.y_binning == self.y_size and self.x_binning != self.x_size :
             dummy_data = np.zeros((self.x_size//self.x_binning,))
-            self.x_axis = Axis(data=data_x_axis, label='Energy loss', units='eV', index=0)
+            self.x_axis = Axis(data=data_x_axis, label='', units='', index=0)
         # Case 4 : No full binning -> 2D data
         else :
             dummy_data = np.zeros((self.y_size//self.y_binning,self.x_size//self.x_binning))
             self.y_axis = Axis(data=data_y_axis, label='', units='', index=0)
-            self.x_axis = Axis(data=data_x_axis, label='Energy loss', units='eV', index=1)
+            self.x_axis = Axis(data=data_x_axis, label='', units='', index=1)
 
         dfp = self.prepare_dfp(dummy_data)
         # Prepares the viewer
@@ -229,19 +239,19 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             input data. It can be any shape up to 2D.
         """ 
         if self.x_binning == self.x_size and self.y_binning == self.y_size :
-            dfp = [DataFromPlugins(name = 'Picam',
+            dfp = [DataFromPlugins(name = 'Cheetah3 full sum',
                                 data = data,
                                 dim = 'Data0D')] 
-        elif self.x_binning == self.x_size and self.y_binning != self.y_size : 
-            dfp = [DataFromPlugins(name = 'Picam',
+        elif self.x_binning == self.x_size and self.y_binning != self.y_size :
+            dfp = [DataFromPlugins(name = 'Cheetah3 sum x',
                                 data = [np.atleast_1d(data)],
                                 dim = 'Data1D',axes=[self.y_axis])] 
-        elif self.y_binning == self.y_size and self.x_binning != self.x_size : 
-            dfp = [DataFromPlugins(name = 'Picam',
+        elif self.y_binning == self.y_size and self.x_binning != self.x_size :
+            dfp = [DataFromPlugins(name = 'Cheetah3 sum y',
                                 data = [np.atleast_1d(data)],
                                 dim = 'Data1D',axes=[self.x_axis])]
         else :
-            dfp = [DataFromPlugins(name = 'Picam',
+            dfp = [DataFromPlugins(name = 'Cheetah3',
                                 data = [np.atleast_1d(data)],
                                 dim = 'Data2D',axes=[self.x_axis, self.y_axis])]
         return dfp
@@ -258,30 +268,11 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         """
         # CT13. The callback emitted a signal to display data
         try:
-
-            image = data.reshape((512,512)).astype(float) 
-            dtp =[]
-            if self.binning == 'None' : 
-                dtp.append(DataFromPlugins(name='Cheetah3 image',
-                                            data=[np.atleast_1d(
-                                            image) ]))
-            elif self.binning == 'Vertical' : 
-                dtp.append(DataFromPlugins(name = 'Cheetah3 sum X',
-                                data = [np.atleast_1d(image.sum(axis = 0))],
-                                dim = 'Data1D'))
-                
-            elif self.binning == 'Horizontal' : 
-                dtp.append(DataFromPlugins(name = 'Cheetah3 sum Y',
-                                data = [np.atleast_1d(image.sum(axis = 1))],
-                                dim = 'Data1D'))
-                    
+            binned_data = bin2d(data,self.x_binning,self.y_binning)
+            dfp = self.prepare_dfp(data=binned_data)                   
             self.dte_signal.emit(DataToExport('Cheetah3',
-                                            data=dtp))
-                # QtWidgets.QApplication.processEvents() 
-            # CT14. Once the data are displayed we come back to the callback to fetch additional data.
-            self.callback_signal.emit()
+                                            data=dfp))
         except Exception as e:
-            print("An exception occured in emit data")
             self.emit_status(ThreadCommand('Update_Status', [str(e), 'log']))
 
     def grab_data(self, Naverage=1, **kwargs):
@@ -295,21 +286,16 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         kwargs: dict
             others optionals arguments
         """
-        ## TODO for your custom plugin: you should choose EITHER the synchrone or the asynchrone version following
-
-        ##synchrone version (blocking function)
+        self.controller.ntriggers = int(2e9)
         try:
-
             if kwargs.get('live',False) == True :
-                self.controller.ntriggers = int(2e9)
-                self.controller.start()
+                self.controller.start(timeout = 0.0)
                 # CT9. We trigger the execution of the callback thread start_readout function. 
-                self.startup_callback_signal.emit()
+                self.callback_signal.emit(0)
 
             else:
-                self.controller.ntriggers = 1
-                self.controller.start()
-                self.startup_callback_signal.emit()
+                self.controller.start(timeout = 5.0)
+                self.callback_signal.emit(1)
 
 
         except Exception as e:
@@ -318,7 +304,6 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
 
     def stop(self):
         """Stop the current grab hardware wise if necessary"""
-        ## TODO for your custom plugin
         self.controller.stop()
         
     ####################
@@ -341,37 +326,37 @@ class Cheetah3Callback(QtCore.QObject):
     """
 
     """
-    data_sig_startup = QtCore.Signal(np.ndarray)
     data_sig = QtCore.Signal(np.ndarray)
 
     def __init__(self, controller):
-        super(Cheetah3Callback, self).__init__()
-        self.buffer = collections.deque(maxlen=100)
         self.controller = controller
+        super().__init__()
  
-    def start_readout(self):
-        while True :
-            # CT10. We start a blocking function. It waits until data are avaible.
-            current_image = self.controller.preview() 
-            self.buffer.append(current_image)
-            if len(self.buffer) > 0 :
-                # CT11. One data are ready we want them displayed, so we signal the main thread
-                self.data_sig_startup.emit(self.buffer.pop())
-            if self.controller.get_status() == "DA_STOPPING" or self.controller.get_status() == "DA_IDLE" : 
-                logger.info("Acquisition finished")
-                break
-
-            # CT12. The side thread continues to pile up data in the rolling buffer
-    
-    def readout(self) :
-            # CT15. Since the loop is still running 
-        while True :
-            if len(self.buffer) > 0 : 
-                break
-            else :
-                if self.controller.get_status() == "DA_STOPPING" or self.controller.get_status() == "DA_IDLE" :
-                    return
-        self.data_sig.emit(self.buffer.pop())
+    def readout(self,num_frames : int):
+        if num_frames == 0 : 
+            while True :
+                try : 
+                # CT10. We start a blocking function. It waits until data are avaible.
+                    current_image = self.controller.preview() 
+                    self.data_sig.emit(current_image)
+                    if self.controller.get_status() == "DA_IDLE" : 
+                        logger.info("Acquisition finished")
+                        break
+                except BrokenPipeError : 
+                    logger.info('Acquistion stopped.')
+                    break
+        else : 
+            for i in range(num_frames) : 
+                try : 
+                # CT10. We start a blocking function. It waits until data are avaible.
+                    current_image = self.controller.preview() 
+                    self.data_sig.emit(current_image)
+                    if self.controller.get_status() == "DA_IDLE" : 
+                        logger.info("Acquisition finished")
+                        break
+                except BrokenPipeError : 
+                    logger.info('Acquistion stopped.')
+                    break
 
 ###########################            
 # III. Local testing code #
