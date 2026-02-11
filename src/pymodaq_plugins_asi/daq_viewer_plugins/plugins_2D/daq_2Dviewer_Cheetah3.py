@@ -108,13 +108,16 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             self.set_axes()
         elif param.name() == 'bpc_file_path' :
             self.controller.config.add_bpc_file(param.value())
-            # self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
+            self.controller.config.refresh()
+            self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
         elif param.name() == 'dacs_file_path' :
             self.controller.config.add_dacs_file(param.value())
-            # self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
+            self.controller.config.refresh()
+            self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
         elif param.name() == 'save_folder_path' :
             self.controller.config.add_save_folder(param.value())
-            # self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
+            self.controller.config.refresh()
+            self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
         elif param.name() == 'destination' :
             self.controller.config.build_destination(param.value()["selected"])
         elif param.name() == 'bpc_file_paths_list' :

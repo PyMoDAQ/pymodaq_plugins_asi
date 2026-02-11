@@ -162,6 +162,12 @@ class Cheetah3Config :
         save_folders.append(folder_path)
         self.config["CHEETAH3"]["file_paths"]['data'] = save_folders
         self.config.save()
+        
+    def refresh(self) : 
+        """
+        Recreates a Config object so that updates to the file are accessible.
+        """
+        self.config = Config()
 
 #################################
 # II. Cheetah3 controller class #
