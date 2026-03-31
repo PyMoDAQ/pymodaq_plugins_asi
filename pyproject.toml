@@ -21,7 +21,7 @@ authors = [
     {name = "Teurtrie Adrien", email = "adrien.teurtrie@cemes.fr"},
 ]
 maintainers = [
-    {name = "Adrien Teurtrie", email = "adrien.teurtrie@♥cemes.fr"},
+    {name = "Adrien Teurtrie", email = "adrien.teurtrie@cemes.fr"},
 ]
 
 # nottodo: leave everything below as is!

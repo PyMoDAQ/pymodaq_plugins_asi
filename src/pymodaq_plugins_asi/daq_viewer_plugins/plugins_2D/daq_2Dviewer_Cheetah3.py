@@ -10,7 +10,7 @@ from pymodaq.utils.data import DataFromPlugins
 from pymodaq_utils.logger import set_logger, get_module_name
 import collections
 
-from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3
+from pymodaq_plugins_asi.hardware.cheetah3 import Cheetah3, config
 from pymodaq_plugins_asi.hardware.camera_utils import bin2d, get_bin_list
 
 logger = set_logger(get_module_name(__file__))
@@ -107,19 +107,19 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
             self.y_binning = param.value()
             self.set_axes()
         elif param.name() == 'bpc_file_path' :
-            self.controller.config.add_bpc_file(param.value())
-            self.controller.config.refresh()
-            self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
+            self.controller.cheetah3_config.add_bpc_file(param.value())
+            self.controller.cheetah3_config.refresh()
+            self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(config("CHEETAH3","file_paths",'bpc'))
         elif param.name() == 'dacs_file_path' :
-            self.controller.config.add_dacs_file(param.value())
-            self.controller.config.refresh()
-            self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
+            self.controller.cheetah3_config.add_dacs_file(param.value())
+            self.controller.cheetah3_config.refresh()
+            self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(config("CHEETAH3","file_paths",'dacs'))
         elif param.name() == 'save_folder_path' :
-            self.controller.config.add_save_folder(param.value())
-            self.controller.config.refresh()
-            self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
+            self.controller.cheetah3_config.add_save_folder(param.value())
+            self.controller.cheetah3_config.refresh()
+            self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
         elif param.name() == 'destination' :
-            self.controller.config.build_destination(param.value()["selected"])
+            self.controller.cheetah3_config.build_destination(param.value()["selected"])
         elif param.name() == 'bpc_file_paths_list' :
             self.controller.bpc_file = param.value()
         elif param.name() == 'dacs_file_paths_list' :
@@ -160,8 +160,8 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         initialized: bool
             False if initialization failed otherwise True
         """
-        self.controller = self.ini_detector_init(slave_controller = controller, new_controller = Cheetah3()) 
         if self.is_master:
+            self.controller = Cheetah3()
             initialized = self.controller.check_connection()
             info = "The DAQ_viewer Cheetah3 has successfully started"
             # CT02. An object (called callback), is instanciated.
@@ -190,9 +190,9 @@ class DAQ_2DViewer_Cheetah3(DAQ_Viewer_base):
         self._y_size = self.controller.y_size
         self.settings.child('camera_settings','x_binning').setLimits(get_bin_list(self.x_size))
         self.settings.child('camera_settings','y_binning').setLimits(get_bin_list(self.y_size))
-        self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['bpc'])
-        self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['dacs'])
-        self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(self.controller.config.config["CHEETAH3"]["file_paths"]['data'])
+        self.settings.child('file_paths_lists','bpc_file_paths_list').setLimits(config("CHEETAH3","file_paths",'bpc'))
+        self.settings.child('file_paths_lists','dacs_file_paths_list').setLimits(config("CHEETAH3","file_paths",'dacs'))
+        self.settings.child('file_paths_lists','save_folder_paths_list').setLimits(config("CHEETAH3","file_paths",'data'))
 
         return info, initialized
 

@@ -25,6 +25,8 @@ logger = set_logger(get_module_name(__file__))
 #   II. 4. Cheetah3 start/stop functions
 # III. Local testing code
 
+config = Config()
+
 ############################
 # I. Cheetah3 config class #
 ############################
@@ -40,7 +42,6 @@ class Cheetah3Config :
 
     :destination: A dictionnary containing the serval-readable destinations for the serval data outputs.
     """
-
     def __init__(self):
         """
         Reads and stores values of the config_cheetah3.toml file from the user preference folder.
@@ -51,7 +52,6 @@ class Cheetah3Config :
         Result
         ------ 
         """
-        self.config = Config()
         self.build_destination()
 
     def build_destination(self, destination_names = ['live_preview']) -> None :
@@ -70,7 +70,7 @@ class Cheetah3Config :
         """
         self.destination = dict()
         for destination_name in destination_names : 
-            self.destination.update(self.config['CHEETAH3']['destinations'][destination_name])
+            self.destination.update(config('CHEETAH3','destinations',destination_name))
 
     def add_destination(self, destination : dict, destination_name  = '') -> None : 
         """
@@ -89,8 +89,8 @@ class Cheetah3Config :
         """
         self.destination.update(destination)
         if len(destination_name) > 0  : 
-            self.config['CHEETAH3']['destinations'][destination_name].update(destination)
-            self.config.save()
+            config('CHEETAH3','destinations',destination_name).update(destination)
+            config.save()
 
     def destination_names_list(self) -> list[str] :
         """
@@ -102,7 +102,7 @@ class Cheetah3Config :
         :profile_name_list: list of the destination profiles.
         """
         profile_name_list = [] 
-        for key in self.config["CHEETAH3"]["destinations"] : 
+        for key in config("CHEETAH3","destinations") : 
             profile_name_list.append(key)
         return profile_name_list
     
@@ -120,10 +120,10 @@ class Cheetah3Config :
 
         None
         """ 
-        bpc_files = self.config["CHEETAH3"]["file_paths"]['bpc']
+        bpc_files = config("CHEETAH3","file_paths",'bpc')
         bpc_files.append(file_path)
-        self.config["CHEETAH3"]["file_paths"]['bpc'] = bpc_files
-        self.config.save()
+        config("CHEETAH3","file_paths",'bpc') = bpc_files
+        config.save()
 
     def add_dacs_file(self, file_path : str) -> None :
         """
@@ -139,10 +139,10 @@ class Cheetah3Config :
 
         None
         """ 
-        dacs_files = self.config["CHEETAH3"]["file_paths"]['dacs']
+        dacs_files = config("CHEETAH3","file_paths",'dacs')
         dacs_files.append(file_path)
-        self.config["CHEETAH3"]["file_paths"]['dacs'] = dacs_files
-        self.config.save()
+        config("CHEETAH3","file_paths",'dacs') = dacs_files
+        config.save()
 
     def add_save_folder(self, folder_path : str) -> None :
         """
@@ -158,16 +158,17 @@ class Cheetah3Config :
 
         None
         """ 
-        save_folders = self.config["CHEETAH3"]["file_paths"]['data']
+        save_folders = config("CHEETAH3","file_paths",'data')
         save_folders.append(folder_path)
-        self.config["CHEETAH3"]["file_paths"]['data'] = save_folders
-        self.config.save()
+        config("CHEETAH3","file_paths",'data') = save_folders
+        config.save()
         
     def refresh(self) : 
         """
         Recreates a Config object so that updates to the file are accessible.
         """
-        self.config = Config()
+        global config
+        config = Config()
 
 #################################
 # II. Cheetah3 controller class #
@@ -202,8 +203,8 @@ class Cheetah3() :
         """
         Instantiate the camera object that controls the hardware through Serval.
         """
-        self.config = Cheetah3Config()
-        self.serverurl = self.config.config['CHEETAH3']['connection']['serverurl']
+        self.cheetah3_config = Cheetah3Config()
+        self.serverurl = config('CHEETAH3','connection','serverurl')
         self.dashboard = self.get_dashboard()
         self.detector_config = self.get_detector_config()
         self.detector_info = self.get_detector_info()
@@ -408,11 +409,11 @@ class Cheetah3() :
         Sets the destination of the data 
         """
         for profile in profile_list : 
-            assert profile in self.config.destination_names_list(), f"You have to first add this profile : {profile} to the available list of profiles : {self.config.destination_names_list()}"
-        self.config.build_destination(profile_list)
-        if 'Preview' in self.config.destination.keys() : 
-            self.config.destination['Preview']['Period'] = max(self.exposure_time.magnitude,0.05)
-        self.put_request(url = self.serverurl + '/server/destination', data = json.dumps(self.config.destination))  
+            assert profile in self.cheetah3_config.destination_names_list(), f"You have to first add this profile : {profile} to the available list of profiles : {self.cheetah3_config.destination_names_list()}"
+        self.cheetah3_config.build_destination(profile_list)
+        if 'Preview' in self.cheetah3_config.destination.keys() : 
+            self.cheetah3_config.destination['Preview']['Period'] = max(self.exposure_time.magnitude,0.05)
+        self.put_request(url = self.serverurl + '/server/destination', data = json.dumps(self.cheetah3_config.destination))  
 
     ##############################
     # II. 3. Cheetah3 properties #
@@ -421,12 +422,12 @@ class Cheetah3() :
     @property
     def bpc_file(self) -> str: 
         if self._bpc_file is None : 
-            self._bpc_file = self.config.config['CHEETAH3']['file_paths']['bpc'][0]
+            self._bpc_file = config('CHEETAH3','file_paths','bpc')[0]
         return self._bpc_file
 
     @bpc_file.setter
     def bpc_file(self, filename : str) -> None : 
-        if filename in self.config.config['CHEETAH3']['file_paths']['bpc'] :
+        if filename in config('CHEETAH3','file_paths','bpc') :
             self._bpc_file = filename
         else :
             logger.info('the bpc file : %s is not part of the available files.',filename)  
@@ -434,12 +435,12 @@ class Cheetah3() :
     @property
     def dacs_file(self) -> str : 
         if self._dacs_file is None : 
-            self._dacs_file = self.config.config['CHEETAH3']['file_paths']['dacs'][0]
+            self._dacs_file = config('CHEETAH3','file_paths','dacs')[0]
         return self._dacs_file
 
     @dacs_file.setter
     def dacs_file(self, filename : str) -> None : 
-        if filename in self.config.config['CHEETAH3']['file_paths']['dacs'] :
+        if filename in config('CHEETAH3','file_paths','dacs') :
             self._dacs_file = filename
         else :
             logger.info('the dacs file : %s is not part of the available files.', filename) 
@@ -447,12 +448,12 @@ class Cheetah3() :
     @property
     def save_folder(self) -> str : 
         if self._save_folder is None : 
-            self._save_folder = self.config.config['CHEETAH3']['file_paths']['data'][0]
+            self._save_folder = config('CHEETAH3','file_paths','data')[0]
         return self._save_folder
 
     @save_folder.setter
     def save_folder(self, folder_name : str) -> None : 
-        if folder_name in self.config.config['CHEETAH3']['file_paths']['data'] :
+        if folder_name in config('CHEETAH3','file_paths','data') :
             self._save_folder = folder_name
         else :
             logger.info('the dacs file : %s is not part of the available files.', folder_name) 
