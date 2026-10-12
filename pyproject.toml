@@ -12,7 +12,10 @@ package-url = 'https://github.com/PyMoDAQ/pymodaq_plugins_asi' #todo modify url 
 name = "pymodaq_plugins_asi"
 description = 'Pymodaq plugin for controlling Amsterdam Scientific Instruments hardware.'
 dependencies = [
-    "pymodaq>=5.0.0",
+    "pymodaq>=5.3.2",
+    "pymodaq_utils>=5.3.1",
+    "pymodaq_gui>=5.3.0",
+    "pymodaq_data>=5.3.0",
     "requests",
     "pillow",
 ]
